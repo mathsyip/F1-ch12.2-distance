@@ -10,7 +10,7 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #f3f4f6; font-family: 'Inter', sans-serif; display: flex; height: 100vh; }
         
-        /* 左側控制面板：固定寬度，獨立滾動 */
+        /* 左側控制面板：固定寬度 */
         #ui-panel {
             width: 420px;
             min-width: 420px;
@@ -21,7 +21,16 @@
             display: flex;
             flex-direction: column;
             padding: 1.5rem;
-            overflow-y: auto;
+            /* 隱藏外層捲軸，確保排版緊湊 */
+            overflow: hidden; 
+        }
+
+        /* 內容區域：緊湊排列 */
+        .panel-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem; /* 縮小整體區塊間距以適應無捲軸顯示 */
+            height: 100%;
         }
 
         /* 右側 3D 畫布區塊 */
@@ -52,16 +61,18 @@
 <body>
 
     <div id="ui-panel">
-        <div class="flex-grow flex flex-col space-y-4">
+        <div class="panel-content">
+            <!-- 標題與題號 -->
             <div>
                 <h1 class="text-2xl font-extrabold text-gray-900 mb-1">坐標幾何：距離</h1>
-                <p class="text-sm text-gray-600">觀察兩點之間的水平或垂直距離。</p>
-                <div class="text-xs font-bold text-indigo-600 mt-2 bg-indigo-50 inline-block px-3 py-1 rounded-full">
+                <p class="text-sm text-gray-600 mb-2">觀察兩點之間的水平或垂直距離。</p>
+                <div class="text-xs font-bold text-indigo-600 bg-indigo-50 inline-block px-3 py-1 rounded-full">
                     第 <span id="question-counter">1</span> / 100 題
                 </div>
             </div>
 
-            <div class="flex flex-col space-y-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+            <!-- A, B 點座標顯示 -->
+            <div class="flex flex-col space-y-2 bg-gray-50 p-3 rounded-xl border border-gray-200">
                 <div class="flex items-center space-x-4">
                     <div class="w-6 h-6 rounded-full bg-red-500 shadow-md border-2 border-white"></div>
                     <span class="coord-text" id="coord-A">A (x, y)</span>
@@ -72,32 +83,32 @@
                 </div>
             </div>
 
-            <div class="p-4 border-2 border-orange-100 bg-orange-50 rounded-xl flex flex-col">
-                <div class="flex justify-between items-center mb-2">
+            <!-- 計算過程與結果 -->
+            <div class="p-3 border-2 border-orange-100 bg-orange-50 rounded-xl flex flex-col">
+                <div class="flex justify-between items-center mb-1">
                     <div class="text-lg text-orange-800 font-bold">距離 Distance:</div>
                     <div class="distance-text" id="distance-display">? 單位</div>
                 </div>
                 
-                <!-- 修改：放大計算過程的字體 (text-2xl, min-h-[7rem]) -->
-                <div class="text-2xl text-gray-800 mt-2 font-mono font-bold bg-white p-3 rounded-lg shadow-sm min-h-[7rem] flex flex-col justify-center" id="calculation-display">
+                <div class="text-2xl text-gray-800 mt-1 font-mono font-bold bg-white p-3 rounded-lg shadow-sm min-h-[7rem] flex flex-col justify-center" id="calculation-display">
                     <div id="calc-line-1" class="calc-line"></div>
                     <div id="calc-line-2" class="calc-line"></div>
                     <div id="calc-line-3" class="calc-line text-orange-600"></div>
                 </div>
 
-                <div class="flex space-x-2 mt-3">
+                <div class="flex space-x-2 mt-2">
                     <button id="btn-step" class="flex-1 bg-white hover:bg-orange-100 text-orange-600 border-2 border-orange-300 font-bold py-2 px-2 rounded-lg transition-colors text-sm">
                         📝 逐步計算
                     </button>
                     <button id="btn-answer" class="flex-1 bg-orange-500 hover:bg-orange-400 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm shadow-md">
-                        ✅ 直接顯示答案
+                        ✅ 顯示答案
                     </button>
                 </div>
             </div>
 
-            <div class="flex flex-col space-y-2 pt-2 border-t-2 border-gray-100"> <!-- 修改：縮小按鈕間距 space-y-2 -->
+            <!-- 攝影機視角 -->
+            <div class="flex flex-col space-y-2 pt-2 border-t-2 border-gray-100"> 
                 <p class="text-gray-500 font-bold text-xs uppercase tracking-wider">攝影機視角</p>
-                <!-- 修改：縮小按鈕尺寸 (py-2 px-3 text-lg) -->
                 <button id="btn-top" class="btn-view active bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded-lg shadow text-lg flex items-center justify-center space-x-2">
                     <span>🔄 俯視 (XY 平面)</span>
                 </button>
@@ -108,13 +119,13 @@
                     <span>👀 平視 Y 軸</span>
                 </button>
             </div>
-        </div>
 
-        <div class="pt-3 mt-2"> <!-- 修改：縮小間距 -->
-            <!-- 修改：縮小按鈕尺寸 (py-3 text-lg rounded-lg) -->
-            <button id="btn-new" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 active:scale-95 text-lg tracking-wide">
-                ✨ 產生隨機題目
-            </button>
+            <!-- 產生隨機題目 (緊接在平視 Y 軸下方) -->
+            <div class="pt-2 mt-1"> 
+                <button id="btn-new" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 active:scale-95 text-lg tracking-wide">
+                    ✨ 產生隨機題目
+                </button>
+            </div>
         </div>
     </div>
 
@@ -135,9 +146,9 @@
         const GRID_SIZE = GRID_HALF * 2; 
         const SPHERE_RADIUS = 0.7; 
         const Y_OFFSET = SPHERE_RADIUS; 
-        const LABEL_HEIGHT_OFFSET = Y_OFFSET + 3.0; 
+        const LABEL_HEIGHT_OFFSET = Y_OFFSET + 3.5; // 調高標籤
 
-        // 攝影機位置設定 - Y_OFFSET 保證平視時精準貼齊球體高度
+        // 攝影機位置設定 - 正交投影下 position 控制平移軌跡
         const cameraPositions = {
             top: { x: 0, y: 38, z: 0, lookAt: { x: 0, y: Y_OFFSET, z: 0 }, up: { x: 0, y: 0, z: -1 } }, 
             x:   { x: 0, y: Y_OFFSET, z: 38, lookAt: { x: 0, y: Y_OFFSET, z: 0 }, up: { x: 0, y: 1, z: 0 } }, 
@@ -179,9 +190,9 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0xf3f4f6);
 
-            // 使用正交攝影機 (OrthographicCamera) 確保 100% 完美無透視重疊
+            // 【重要升級】使用正交攝影機 (OrthographicCamera) 確保 100% 完美無透視重疊
             const aspect = container.clientWidth / container.clientHeight;
-            const viewSize = 25; 
+            const viewSize = 25; // 視野大小，確保 -10 到 10 完整可見
             camera = new THREE.OrthographicCamera(
                 -viewSize * aspect / 2,
                  viewSize * aspect / 2,
@@ -250,7 +261,7 @@
             arrowX.position.set(GRID_HALF + 0.6, 0, 0);
             arrowX.rotation.z = -Math.PI / 2;
             scene.add(arrowX);
-            addLabel("X", GRID_HALF + 1.5, -0.5, 0, 0x16a34a, 80); 
+            addLabel("X", GRID_HALF + 1.5, -0.8, 0, 0x16a34a, 80); 
 
             // Z 軸 (數學上的 Y 軸)
             const zAxisGeo = new THREE.CylinderGeometry(axisThickness, axisThickness, GRID_SIZE, 16);
@@ -266,7 +277,7 @@
             arrowY.position.set(0, 0, -(GRID_HALF + 0.6));
             arrowY.rotation.x = -Math.PI / 2;
             scene.add(arrowY);
-            addLabel("Y", -1.0, 0, GRID_HALF + 1.5, 0xca8a04, 80); 
+            addLabel("Y", -1.0, 0, GRID_HALF + 1.5, 0xca8a04, 80); // 修正 Y 箭頭標籤位置
 
             for(let i = -GRID_HALF; i <= GRID_HALF; i++) {
                 if (i !== 0) {
@@ -288,7 +299,7 @@
             const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
             const sprite = new THREE.Sprite(material);
             
-            sprite.scale.set(14, 3.5, 1);
+            sprite.scale.set(16, 4, 1); // 放大坐標標籤
             sprite.userData = { canvas, context, texture, pointName, baseColorStr };
             
             scene.add(sprite);
@@ -299,18 +310,18 @@
             const { canvas, context, texture, pointName, baseColorStr } = sprite.userData;
             context.clearRect(0, 0, canvas.width, canvas.height);
 
-            context.font = `Bold 80px Inter, sans-serif`;
+            context.font = `Bold 90px Inter, sans-serif`; // 放大字體
             context.textBaseline = 'middle';
             context.lineJoin = 'round';
             context.lineWidth = 12;
 
             const hlColor = '#9333ea'; // 紫色高亮
-            const normalColor = '#1f2937'; // 括號不變色，維持原本顏色
+            const normalColor = '#1f2937'; // 括號與逗號保持深灰色
 
+            // 只有數字會變色，括號不變色
             const xColor = (mode === 'x') ? hlColor : normalColor;
             const yColor = (mode === 'y') ? hlColor : normalColor;
 
-            // 嚴格分拆：括號保持深灰色 (normalColor)
             const parts = [
                 { text: `${pointName} `, color: baseColorStr },
                 { text: `(`, color: normalColor },
@@ -326,6 +337,7 @@
             const centerY = canvas.height / 2;
             let currentX = (canvas.width - totalWidth) / 2;
 
+            // 繪製白邊
             parts.forEach(p => {
                 context.strokeStyle = 'white';
                 context.strokeText(p.text, currentX, centerY);
@@ -333,6 +345,7 @@
             });
 
             currentX = (canvas.width - totalWidth) / 2;
+            // 繪製彩色文字
             parts.forEach(p => {
                 context.fillStyle = p.color;
                 context.fillText(p.text, currentX, centerY);
@@ -617,3 +630,4 @@
     </script>
 </body>
 </html>
+
