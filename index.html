@@ -1,0 +1,622 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中一坐標幾何：水平與垂直距離</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f3f4f6; font-family: 'Inter', sans-serif; display: flex; height: 100vh; }
+        
+        /* 左側控制面板：固定寬度，獨立滾動 */
+        #ui-panel {
+            width: 420px;
+            min-width: 420px;
+            height: 100%;
+            background-color: white;
+            box-shadow: 10px 0 25px -5px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        /* 右側 3D 畫布區塊 */
+        #canvas-container { 
+            flex-grow: 1;
+            height: 100%;
+            position: relative;
+        }
+        
+        canvas { outline: none; display: block; }
+
+        .coord-text { font-size: 1.8rem; font-weight: bold; color: #1f2937; }
+        .distance-text { font-size: 2.5rem; font-weight: 900; color: #f97316; margin-top: 0.2rem; }
+        
+        .btn-view { transition: all 0.2s ease; border: 4px solid transparent; }
+        .btn-view.active { border-color: #3b82f6; transform: scale(1.05); box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5); }
+        
+        /* 隱藏未顯示的算式行 */
+        .calc-line { display: none; }
+        .calc-line.show { display: block; animation: fadeIn 0.3s ease-in; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-panel">
+        <div class="flex-grow flex flex-col space-y-4">
+            <div>
+                <h1 class="text-2xl font-extrabold text-gray-900 mb-1">坐標幾何：距離</h1>
+                <p class="text-sm text-gray-600">觀察兩點之間的水平或垂直距離。</p>
+                <div class="text-xs font-bold text-indigo-600 mt-2 bg-indigo-50 inline-block px-3 py-1 rounded-full">
+                    第 <span id="question-counter">1</span> / 100 題
+                </div>
+            </div>
+
+            <div class="flex flex-col space-y-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                <div class="flex items-center space-x-4">
+                    <div class="w-6 h-6 rounded-full bg-red-500 shadow-md border-2 border-white"></div>
+                    <span class="coord-text" id="coord-A">A (x, y)</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="w-6 h-6 rounded-full bg-blue-500 shadow-md border-2 border-white"></div>
+                    <span class="coord-text" id="coord-B">B (x, y)</span>
+                </div>
+            </div>
+
+            <div class="p-4 border-2 border-orange-100 bg-orange-50 rounded-xl flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="text-lg text-orange-800 font-bold">距離 Distance:</div>
+                    <div class="distance-text" id="distance-display">? 單位</div>
+                </div>
+                
+                <!-- 修改：放大計算過程的字體 (text-2xl, min-h-[7rem]) -->
+                <div class="text-2xl text-gray-800 mt-2 font-mono font-bold bg-white p-3 rounded-lg shadow-sm min-h-[7rem] flex flex-col justify-center" id="calculation-display">
+                    <div id="calc-line-1" class="calc-line"></div>
+                    <div id="calc-line-2" class="calc-line"></div>
+                    <div id="calc-line-3" class="calc-line text-orange-600"></div>
+                </div>
+
+                <div class="flex space-x-2 mt-3">
+                    <button id="btn-step" class="flex-1 bg-white hover:bg-orange-100 text-orange-600 border-2 border-orange-300 font-bold py-2 px-2 rounded-lg transition-colors text-sm">
+                        📝 逐步計算
+                    </button>
+                    <button id="btn-answer" class="flex-1 bg-orange-500 hover:bg-orange-400 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm shadow-md">
+                        ✅ 直接顯示答案
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col space-y-2 pt-2 border-t-2 border-gray-100"> <!-- 修改：縮小按鈕間距 space-y-2 -->
+                <p class="text-gray-500 font-bold text-xs uppercase tracking-wider">攝影機視角</p>
+                <!-- 修改：縮小按鈕尺寸 (py-2 px-3 text-lg) -->
+                <button id="btn-top" class="btn-view active bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded-lg shadow text-lg flex items-center justify-center space-x-2">
+                    <span>🔄 俯視 (XY 平面)</span>
+                </button>
+                <button id="btn-x" class="btn-view bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-3 rounded-lg shadow text-lg flex items-center justify-center space-x-2">
+                    <span>👀 平視 X 軸</span>
+                </button>
+                <button id="btn-y" class="btn-view bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-3 rounded-lg shadow text-lg flex items-center justify-center space-x-2">
+                    <span>👀 平視 Y 軸</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="pt-3 mt-2"> <!-- 修改：縮小間距 -->
+            <!-- 修改：縮小按鈕尺寸 (py-3 text-lg rounded-lg) -->
+            <button id="btn-new" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 active:scale-95 text-lg tracking-wide">
+                ✨ 產生隨機題目
+            </button>
+        </div>
+    </div>
+
+    <!-- 右側 3D 容器 -->
+    <div id="canvas-container"></div>
+
+    <script>
+        let scene, camera, renderer;
+        let sphereA, sphereB;
+        let lineAB;
+        let labels = []; 
+        let currentMode = 'top'; 
+
+        let questionBank = [];
+        let currentQuestionIndex = 0;
+
+        const GRID_HALF = 10;
+        const GRID_SIZE = GRID_HALF * 2; 
+        const SPHERE_RADIUS = 0.7; 
+        const Y_OFFSET = SPHERE_RADIUS; 
+        const LABEL_HEIGHT_OFFSET = Y_OFFSET + 3.0; 
+
+        // 攝影機位置設定 - Y_OFFSET 保證平視時精準貼齊球體高度
+        const cameraPositions = {
+            top: { x: 0, y: 38, z: 0, lookAt: { x: 0, y: Y_OFFSET, z: 0 }, up: { x: 0, y: 0, z: -1 } }, 
+            x:   { x: 0, y: Y_OFFSET, z: 38, lookAt: { x: 0, y: Y_OFFSET, z: 0 }, up: { x: 0, y: 1, z: 0 } }, 
+            y:   { x: 38, y: Y_OFFSET, z: 0, lookAt: { x: 0, y: Y_OFFSET, z: 0 }, up: { x: 0, y: 1, z: 0 } }  
+        };
+
+        let currentPosA = { x: 0, y: 0 };
+        let currentPosB = { x: 0, y: 0 };
+        
+        let calcStrings = [];
+        let currentCalcStep = 0;
+        let currentDistance = 0;
+        
+        function initQuestions() {
+            questionBank = [];
+            for (let i = 0; i < 100; i++) {
+                const isHorizontal = Math.random() > 0.5;
+                const commonVal = Math.floor(Math.random() * (GRID_SIZE + 1)) - GRID_HALF; 
+                
+                let val1 = Math.floor(Math.random() * (GRID_SIZE + 1)) - GRID_HALF;
+                let val2 = Math.floor(Math.random() * (GRID_SIZE + 1)) - GRID_HALF;
+                
+                while (val1 === val2) {
+                    val2 = Math.floor(Math.random() * (GRID_SIZE + 1)) - GRID_HALF;
+                }
+
+                if (isHorizontal) {
+                    questionBank.push({ A: { x: val1, y: commonVal }, B: { x: val2, y: commonVal } });
+                } else {
+                    questionBank.push({ A: { x: commonVal, y: val1 }, B: { x: commonVal, y: val2 } });
+                }
+            }
+        }
+
+        function init() {
+            initQuestions();
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf3f4f6);
+
+            // 使用正交攝影機 (OrthographicCamera) 確保 100% 完美無透視重疊
+            const aspect = container.clientWidth / container.clientHeight;
+            const viewSize = 25; 
+            camera = new THREE.OrthographicCamera(
+                -viewSize * aspect / 2,
+                 viewSize * aspect / 2,
+                 viewSize / 2,
+                -viewSize / 2,
+                -100, 
+                1000
+            );
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight.position.set(10, 30, 20);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            createGridAndAxes();
+            createSpheres();
+
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('btn-new').addEventListener('click', () => loadNextQuestion(true));
+            document.getElementById('btn-top').addEventListener('click', () => setCameraPosition('top', true));
+            document.getElementById('btn-x').addEventListener('click', () => setCameraPosition('x', true));
+            document.getElementById('btn-y').addEventListener('click', () => setCameraPosition('y', true));
+            
+            document.getElementById('btn-step').addEventListener('click', showNextStep);
+            document.getElementById('btn-answer').addEventListener('click', showFullAnswer);
+
+            setCameraPosition('top', false);
+            loadNextQuestion(false);
+            animate();
+        }
+
+        function createGridAndAxes() {
+            const gridMaterial = new THREE.LineBasicMaterial({ color: 0xd1d5db, transparent: true, opacity: 0.8 });
+            const gridGeometry = new THREE.BufferGeometry();
+            const gridVertices = [];
+
+            for (let i = -GRID_HALF; i <= GRID_HALF; i++) {
+                gridVertices.push(-GRID_HALF, 0, i); gridVertices.push(GRID_HALF, 0, i);
+                gridVertices.push(i, 0, -GRID_HALF); gridVertices.push(i, 0, GRID_HALF);
+            }
+            gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(gridVertices, 3));
+            let gridHelper = new THREE.LineSegments(gridGeometry, gridMaterial);
+            scene.add(gridHelper);
+
+            const axisThickness = 0.12;
+            
+            // X 軸
+            const xAxisGeo = new THREE.CylinderGeometry(axisThickness, axisThickness, GRID_SIZE, 16);
+            const xAxisMat = new THREE.MeshBasicMaterial({ color: 0x111827 }); 
+            const xAxisMesh = new THREE.Mesh(xAxisGeo, xAxisMat);
+            xAxisMesh.rotation.z = Math.PI / 2;
+            scene.add(xAxisMesh);
+
+            // X 軸箭頭
+            const arrowXGeo = new THREE.ConeGeometry(0.4, 1.2, 16);
+            const arrowXMat = new THREE.MeshBasicMaterial({ color: 0x16a34a }); 
+            const arrowX = new THREE.Mesh(arrowXGeo, arrowXMat);
+            arrowX.position.set(GRID_HALF + 0.6, 0, 0);
+            arrowX.rotation.z = -Math.PI / 2;
+            scene.add(arrowX);
+            addLabel("X", GRID_HALF + 1.5, -0.5, 0, 0x16a34a, 80); 
+
+            // Z 軸 (數學上的 Y 軸)
+            const zAxisGeo = new THREE.CylinderGeometry(axisThickness, axisThickness, GRID_SIZE, 16);
+            const zAxisMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+            const zAxisMesh = new THREE.Mesh(zAxisGeo, zAxisMat);
+            zAxisMesh.rotation.x = Math.PI / 2; 
+            scene.add(zAxisMesh);
+
+            // Y 軸箭頭
+            const arrowYGeo = new THREE.ConeGeometry(0.4, 1.2, 16);
+            const arrowYMat = new THREE.MeshBasicMaterial({ color: 0xca8a04 }); 
+            const arrowY = new THREE.Mesh(arrowYGeo, arrowYMat);
+            arrowY.position.set(0, 0, -(GRID_HALF + 0.6));
+            arrowY.rotation.x = -Math.PI / 2;
+            scene.add(arrowY);
+            addLabel("Y", -1.0, 0, GRID_HALF + 1.5, 0xca8a04, 80); 
+
+            for(let i = -GRID_HALF; i <= GRID_HALF; i++) {
+                if (i !== 0) {
+                    addLabel(i.toString(), i, 0.1, -1.2, 0x374151, 48); 
+                    addLabel(i.toString(), -1.2, 0.1, i, 0x374151, 48); 
+                } else {
+                    addLabel("0", -1.0, 0.1, -1.0, 0x000000, 54); 
+                }
+            }
+        }
+
+        function createDynamicLabel(pointName, baseColorStr) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; 
+            canvas.height = 256;
+            const context = canvas.getContext('2d');
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+            const sprite = new THREE.Sprite(material);
+            
+            sprite.scale.set(14, 3.5, 1);
+            sprite.userData = { canvas, context, texture, pointName, baseColorStr };
+            
+            scene.add(sprite);
+            return sprite;
+        }
+
+        function updateLabelText(sprite, x, y, mode) {
+            const { canvas, context, texture, pointName, baseColorStr } = sprite.userData;
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            context.font = `Bold 80px Inter, sans-serif`;
+            context.textBaseline = 'middle';
+            context.lineJoin = 'round';
+            context.lineWidth = 12;
+
+            const hlColor = '#9333ea'; // 紫色高亮
+            const normalColor = '#1f2937'; // 括號不變色，維持原本顏色
+
+            const xColor = (mode === 'x') ? hlColor : normalColor;
+            const yColor = (mode === 'y') ? hlColor : normalColor;
+
+            // 嚴格分拆：括號保持深灰色 (normalColor)
+            const parts = [
+                { text: `${pointName} `, color: baseColorStr },
+                { text: `(`, color: normalColor },
+                { text: `${x}`, color: xColor },
+                { text: `, `, color: normalColor },
+                { text: `${y}`, color: yColor },
+                { text: `)`, color: normalColor }
+            ];
+
+            let totalWidth = 0;
+            parts.forEach(p => totalWidth += context.measureText(p.text).width);
+
+            const centerY = canvas.height / 2;
+            let currentX = (canvas.width - totalWidth) / 2;
+
+            parts.forEach(p => {
+                context.strokeStyle = 'white';
+                context.strokeText(p.text, currentX, centerY);
+                currentX += context.measureText(p.text).width;
+            });
+
+            currentX = (canvas.width - totalWidth) / 2;
+            parts.forEach(p => {
+                context.fillStyle = p.color;
+                context.fillText(p.text, currentX, centerY);
+                currentX += context.measureText(p.text).width;
+            });
+
+            texture.needsUpdate = true;
+        }
+
+        function createSpheres() {
+            const geometryA = new THREE.SphereGeometry(SPHERE_RADIUS, 32, 32);
+            const materialA = new THREE.MeshPhongMaterial({ color: 0xef4444 });
+            sphereA = new THREE.Mesh(geometryA, materialA);
+            scene.add(sphereA);
+            sphereA.label = createDynamicLabel("A", "#ef4444");
+
+            const geometryB = new THREE.SphereGeometry(SPHERE_RADIUS, 32, 32);
+            const materialB = new THREE.MeshPhongMaterial({ color: 0x3b82f6 });
+            sphereB = new THREE.Mesh(geometryB, materialB);
+            scene.add(sphereB);
+            sphereB.label = createDynamicLabel("B", "#3b82f6");
+
+            const path = new THREE.LineCurve3(new THREE.Vector3(0,Y_OFFSET,0), new THREE.Vector3(1,Y_OFFSET,0));
+            const tubeGeo = new THREE.TubeGeometry(path, 1, 0.15, 8, false);
+            const tubeMat = new THREE.MeshBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.4 });
+            lineAB = new THREE.Mesh(tubeGeo, tubeMat);
+            scene.add(lineAB);
+        }
+
+        function addLabel(text, x, y, z, colorStr, fontSize = 48) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 256;
+            
+            context.font = `Bold ${fontSize}px Inter, sans-serif`;
+            context.fillStyle = '#' + new THREE.Color(colorStr).getHexString();
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.strokeStyle = 'white';
+            context.lineWidth = 10;
+            context.strokeText(text, 128, 128);
+            context.fillText(text, 128, 128);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
+            const sprite = new THREE.Sprite(material);
+            
+            sprite.scale.set(3.5, 3.5, 1);
+            sprite.position.set(x, y, -z); 
+            
+            scene.add(sprite);
+            labels.push(sprite);
+            return sprite;
+        }
+
+        function setCameraPosition(mode, animate = true) {
+            currentMode = mode;
+            const targetPos = cameraPositions[mode];
+
+            if (sphereA && sphereB && sphereA.label && sphereB.label) {
+                updateLabelText(sphereA.label, currentPosA.x, currentPosA.y, currentMode);
+                updateLabelText(sphereB.label, currentPosB.x, currentPosB.y, currentMode);
+            }
+
+            document.querySelectorAll('.btn-view').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`btn-${mode}`);
+            if(activeBtn) activeBtn.classList.add('active');
+
+            if (animate) {
+                const duration = mode === 'top' ? 1200 : 2500; 
+                
+                const startPos = camera.position.clone();
+                const startQuat = camera.quaternion.clone();
+                
+                const endPos = new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z);
+                
+                // 【核心修復】使用 Dummy Camera 精準獲取目標的四元數 (Quaternion)，徹底解決 NaN 或扭曲問題
+                const dummyCam = camera.clone();
+                dummyCam.position.copy(endPos);
+                dummyCam.up.set(targetPos.up.x, targetPos.up.y, targetPos.up.z);
+                dummyCam.lookAt(targetPos.lookAt.x, targetPos.lookAt.y, targetPos.lookAt.z);
+                const endQuat = dummyCam.quaternion.clone();
+
+                const tweenObj = { t: 0 };
+
+                new TWEEN.Tween(tweenObj)
+                    .to({ t: 1 }, duration)
+                    .easing(TWEEN.Easing.Quadratic.InOut) 
+                    .onUpdate(() => {
+                        // 使用 Quaternion Slerp保證 3D 空間中最完美的無扭曲旋轉
+                        camera.quaternion.copy(startQuat).slerp(endQuat, tweenObj.t);
+                        // Orthographic 下直接 Lerp 座標即能保持正確的平移軌跡
+                        camera.position.copy(startPos).lerp(endPos, tweenObj.t);
+                    })
+                    .onComplete(() => {
+                        camera.position.copy(endPos);
+                        camera.quaternion.copy(endQuat);
+                        camera.up.set(targetPos.up.x, targetPos.up.y, targetPos.up.z);
+                    })
+                    .start();
+            } else {
+                camera.position.set(targetPos.x, targetPos.y, targetPos.z);
+                camera.up.set(targetPos.up.x, targetPos.up.y, targetPos.up.z);
+                camera.lookAt(targetPos.lookAt.x, targetPos.lookAt.y, targetPos.lookAt.z);
+            }
+        }
+
+        function loadNextQuestion(animate = true) {
+            if (questionBank.length === 0) initQuestions();
+            
+            const q = questionBank[currentQuestionIndex];
+            currentPosA = q.A;
+            currentPosB = q.B;
+            
+            currentQuestionIndex = (currentQuestionIndex + 1) % questionBank.length;
+            document.getElementById('question-counter').innerText = currentQuestionIndex;
+            
+            document.getElementById('distance-display').innerText = '? 單位';
+            document.getElementById('distance-display').style.color = '#1f2937';
+            document.querySelectorAll('.calc-line').forEach(el => {
+                el.classList.remove('show');
+                el.innerText = '';
+            });
+            currentCalcStep = 0;
+            
+            if (lineAB) {
+                lineAB.material.color.setHex(0x9ca3af);
+                lineAB.material.opacity = 0.4;
+            }
+
+            // 強制還原至俯視畫面
+            if (currentMode !== 'top') {
+                setCameraPosition('top', animate); 
+            }
+            
+            updateSceneWithNewPoints(animate);
+            prepareCalculation();
+        }
+
+        function prepareCalculation() {
+            calcStrings = [];
+            let val1, val2;
+            
+            if (currentPosA.y === currentPosB.y) {
+                val1 = currentPosA.x;
+                val2 = currentPosB.x;
+            } else {
+                val1 = currentPosA.y;
+                val2 = currentPosB.y;
+            }
+            
+            const maxVal = Math.max(val1, val2);
+            const minVal = Math.min(val1, val2);
+            currentDistance = maxVal - minVal;
+            
+            let line1 = `${maxVal} - `;
+            line1 += (minVal < 0) ? `(${minVal})` : `${minVal}`;
+            calcStrings.push(line1);
+            
+            if (minVal < 0) {
+                calcStrings.push(`= ${maxVal} + ${Math.abs(minVal)}`);
+            } else {
+                calcStrings.push(null); 
+            }
+            calcStrings.push(`= ${currentDistance}`);
+        }
+
+        function showNextStep() {
+            if (currentCalcStep === 0) {
+                const el = document.getElementById('calc-line-1');
+                el.innerText = calcStrings[0];
+                el.classList.add('show');
+                currentCalcStep++;
+                if (calcStrings[1] === null) currentCalcStep++; 
+            } else if (currentCalcStep === 1) {
+                const el = document.getElementById('calc-line-2');
+                el.innerText = calcStrings[1];
+                el.classList.add('show');
+                currentCalcStep++;
+            } else if (currentCalcStep === 2) {
+                const el = document.getElementById('calc-line-3');
+                el.innerText = calcStrings[2];
+                el.classList.add('show');
+                
+                document.getElementById('distance-display').innerText = `${currentDistance} 單位`;
+                document.getElementById('distance-display').style.color = '#f97316';
+                
+                lineAB.material.color.setHex(0xf97316);
+                lineAB.material.opacity = 1;
+                currentCalcStep++;
+            }
+        }
+
+        function showFullAnswer() {
+            document.getElementById('calc-line-1').innerText = calcStrings[0];
+            document.getElementById('calc-line-1').classList.add('show');
+            
+            if (calcStrings[1] !== null) {
+                document.getElementById('calc-line-2').innerText = calcStrings[1];
+                document.getElementById('calc-line-2').classList.add('show');
+            }
+            
+            document.getElementById('calc-line-3').innerText = calcStrings[2];
+            document.getElementById('calc-line-3').classList.add('show');
+            
+            document.getElementById('distance-display').innerText = `${currentDistance} 單位`;
+            document.getElementById('distance-display').style.color = '#f97316';
+            
+            lineAB.material.color.setHex(0xf97316);
+            lineAB.material.opacity = 1;
+            currentCalcStep = 3;
+        }
+
+        function updateSceneWithNewPoints(animate = true) {
+            const aX = currentPosA.x;
+            const aZ = -currentPosA.y;
+            const bX = currentPosB.x;
+            const bZ = -currentPosB.y;
+
+            updateLabelText(sphereA.label, currentPosA.x, currentPosA.y, currentMode);
+            updateLabelText(sphereB.label, currentPosB.x, currentPosB.y, currentMode);
+
+            if (animate) {
+                new TWEEN.Tween(sphereA.position)
+                    .to({ x: aX, y: Y_OFFSET, z: aZ }, 800)
+                    .easing(TWEEN.Easing.Quadratic.Out)
+                    .onUpdate(() => {
+                        sphereA.label.position.set(sphereA.position.x, LABEL_HEIGHT_OFFSET, sphereA.position.z);
+                    }).start();
+
+                new TWEEN.Tween(sphereB.position)
+                    .to({ x: bX, y: Y_OFFSET, z: bZ }, 800)
+                    .easing(TWEEN.Easing.Quadratic.Out)
+                    .onUpdate(() => {
+                        sphereB.label.position.set(sphereB.position.x, LABEL_HEIGHT_OFFSET, sphereB.position.z);
+                        updateLine();
+                    }).start();
+            } else {
+                sphereA.position.set(aX, Y_OFFSET, aZ);
+                sphereB.position.set(bX, Y_OFFSET, bZ);
+                sphereA.label.position.set(aX, LABEL_HEIGHT_OFFSET, aZ);
+                sphereB.label.position.set(bX, LABEL_HEIGHT_OFFSET, bZ);
+                updateLine();
+            }
+
+            document.getElementById('coord-A').innerText = `A (${currentPosA.x}, ${currentPosA.y})`;
+            document.getElementById('coord-B').innerText = `B (${currentPosB.x}, ${currentPosB.y})`;
+        }
+
+        function updateLine() {
+            const path = new THREE.LineCurve3(
+                new THREE.Vector3(sphereA.position.x, Y_OFFSET, sphereA.position.z),
+                new THREE.Vector3(sphereB.position.x, Y_OFFSET, sphereB.position.z)
+            );
+            lineAB.geometry.dispose(); 
+            lineAB.geometry = new THREE.TubeGeometry(path, 1, 0.15, 8, false);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const aspect = container.clientWidth / container.clientHeight;
+            const viewSize = 25; 
+            
+            camera.left = -viewSize * aspect / 2;
+            camera.right = viewSize * aspect / 2;
+            camera.top = viewSize / 2;
+            camera.bottom = -viewSize / 2;
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            TWEEN.update(time); 
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+
+    </script>
+</body>
+</html>
+
+```
